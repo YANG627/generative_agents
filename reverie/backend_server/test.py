@@ -9,6 +9,28 @@ import random
 import openai
 import time 
 
+
+import requests
+import json
+def gewu_api_request(text):
+  # url = "http://1.117.203.227/gpu/gewu_api/chatbot/gewu"
+  url = "http://222.222.172.114:81/gpu/small_vile_llm_api"
+
+  payload = json.dumps({
+    "text": text,
+    "top_p": 0.85,
+    "temperature": 0.1
+  })
+  headers = {
+    'Content-Type': 'application/json'
+  }
+
+  response = requests.request("POST", url, headers=headers, data=payload)
+
+  # print(response.text)
+  return response.text
+
+
 from utils import *
 openai.api_key = openai_api_key
 
@@ -31,7 +53,11 @@ def ChatGPT_request(prompt):
     messages=[{"role": "user", "content": prompt}]
     )
     return completion["choices"][0]["message"]["content"]
-  
+    chatgpt_response = completion["choices"][0]["message"]["content"]
+    print("chatgpt_response: ",chatgpt_response)
+    response = gewu_api_request(prompt)
+    print("llm_response: ",response)
+    return response
   except: 
     print ("ChatGPT ERROR")
     return "ChatGPT ERROR"
@@ -61,11 +87,69 @@ Example output json:
 {"output": "[["Jane Doe", "Hi!"], ["John Doe", "Hello there!"] ... ]"}
 """
 
-print (ChatGPT_request(prompt))
+# print ()
+# ChatGPT_request(prompt)
 
 
 
+from sentence_transformers import SentenceTransformer
+def get_embedding(text, model_name="paraphrase-distilroberta-base-v1"):
+    # Initialize the SentenceTransformer model
+    model = SentenceTransformer(model_name)
 
+    text = text.replace("\n", " ")
+    if not text:
+        text = "this is blank"
+
+    # Get the embedding
+    embedding = model.encode(text)
+    print("local embedding", numpy.array(embedding).shape,len(embedding))
+
+    return embedding
+
+
+
+def llm_api_embedd_request(text):
+  # url = "http://1.117.203.227/gpu/gewu_api/chatbot/gewu"
+  url = "http://222.222.172.114:81/gpu/small_vile_llm_api"
+
+  payload = json.dumps({
+    "text": text,
+    "action": "embedding",
+  })
+  headers = {
+    'Content-Type': 'application/json'
+  }
+
+  response = requests.request("POST", url, headers=headers, data=payload)
+
+  # print(response.text)
+  return response.text
+
+
+import numpy
+def get_embedding_gewu(text, model_name="paraphrase-distilroberta-base-v1"):
+    
+    text = text.replace("\n", " ")
+    if not text:
+        text = "this is blank"
+    embedds = llm_api_embedd_request(text)
+    print("gewu embedding", numpy.array(embedds).shape,len(embedds))
+    return embedds
+
+def get_embedding_openai(text, model="text-embedding-ada-002"):
+  text = text.replace("\n", " ")
+  if not text: 
+    text = "this is blank"
+  res = openai.Embedding.create(
+          input=[text], model=model)['data'][0]['embedding']
+  print("openai, embedding",numpy.array(res).shape, len(res))
+  return res
+  
+text = "Bill is sleeping"
+get_embedding(text)
+get_embedding_openai(text)
+get_embedding_gewu(text)
 
 
 

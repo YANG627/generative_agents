@@ -8,14 +8,28 @@ import json
 import random
 import openai
 import time 
+import requests
+import json
+
+
 
 from utils import *
 
 openai.api_key = openai_api_key
 
-def temp_sleep(seconds=0.1):
+class tracer:
+	def __init__(self, func):
+		self.calls = 0
+		self.func = func
+	def __call__(self, *args, **keys):
+		self.calls += 1
+		print('call %s to %s' % (self.calls, self.func.__name__))
+		return self.func(*args, **keys)
+
+def temp_sleep(seconds=0.5):
   time.sleep(seconds)
 
+@tracer
 def ChatGPT_single_request(prompt): 
   temp_sleep()
 
@@ -29,7 +43,7 @@ def ChatGPT_single_request(prompt):
 # ============================================================================
 # #####################[SECTION 1: CHATGPT-3 STRUCTURE] ######################
 # ============================================================================
-
+@tracer
 def GPT4_request(prompt): 
   """
   Given a prompt and a dictionary of GPT parameters, make a request to OpenAI
@@ -55,7 +69,58 @@ def GPT4_request(prompt):
     print ("ChatGPT ERROR")
     return "ChatGPT ERROR"
 
+import os,csv
+def append_to_csv(filename, str1, str2):
+    # 检查文件是否存在
+    file_exists = os.path.isfile(filename)
+    
+    # 打开或创建CSV文件
+    with open(filename, 'a', newline='') as csvfile:
+        writer = csv.writer(csvfile)
+        
+        # 如果文件是新创建的，可以选择添加标题（可选）
+        if not file_exists:
+            writer.writerow(['input', 'output'])
+        
+        # 追加字符串到CSV文件
+        writer.writerow([str1, str2])
 
+def append_to_json(filename, str1, str2, header1="input", header2="output"):
+    # 创建一个字典来保存字符串
+    data = {
+        header1: str1,
+        header2: str2
+    }
+
+    # 打开或创建文件
+    with open(filename, 'a') as jsonfile:
+        # 将字典转换为JSON字符串并写入文件
+        jsonfile.write(json.dumps(data) + '\n')
+
+
+
+@tracer
+def gewu_api_request(text):
+  # url = "http://1.117.203.227/gpu/gewu_api/chatbot/gewu"
+  url = "http://222.222.172.114:81/gpu/small_vile_llm_api"
+
+  payload = json.dumps({
+    "text": text,
+    "action": "text"
+  })
+  headers = {
+    'Content-Type': 'application/json'
+  }
+
+  response = requests.request("POST", url, headers=headers, data=payload)
+  response_text = response.json()["text"]
+  # print(response.text)
+  append_to_json("gewu.json", text, response_text)
+  
+  return response_text
+
+
+@tracer
 def ChatGPT_request(prompt): 
   """
   Given a prompt and a dictionary of GPT parameters, make a request to OpenAI
@@ -74,13 +139,22 @@ def ChatGPT_request(prompt):
     model="gpt-3.5-turbo", 
     messages=[{"role": "user", "content": prompt}]
     )
+    
+    append_to_json("openai.json", prompt, completion["choices"][0]["message"]["content"], header2="chatgpt_output")
+    print("chatGPT response", completion["choices"][0]["message"]["content"]+ "\n")
     return completion["choices"][0]["message"]["content"]
+
+    # response =  gewu_api_request(prompt)
+    # print(response)
+    # print("gewu response",str(response)+ "\n")
+    # return response
+
   
   except: 
     print ("ChatGPT ERROR")
     return "ChatGPT ERROR"
 
-
+@tracer
 def GPT4_safe_generate_response(prompt, 
                                    example_output,
                                    special_instruction,
@@ -193,7 +267,7 @@ def ChatGPT_safe_generate_response_OLD(prompt,
 # ============================================================================
 # ###################[SECTION 2: ORIGINAL GPT-3 STRUCTURE] ###################
 # ============================================================================
-
+@tracer
 def GPT_request(prompt, gpt_parameter): 
   """
   Given a prompt and a dictionary of GPT parameters, make a request to OpenAI
@@ -218,9 +292,19 @@ def GPT_request(prompt, gpt_parameter):
                 presence_penalty=gpt_parameter["presence_penalty"],
                 stream=gpt_parameter["stream"],
                 stop=gpt_parameter["stop"],)
+    append_to_json("openai.json", prompt, response.choices[0].text, header2="GPT_output")
+    print("GPT response",str(response.choices[0].text)+ "\n")
+    
     return response.choices[0].text
-  except: 
-    print ("TOKEN LIMIT EXCEEDED")
+  
+    ## gewu 
+    # response =  gewu_api_request(prompt)
+    # print(response)
+    # print("gewu response",str(response)+ "\n")
+    # # print("gewu response ",response+ "\n")
+    # return response
+  except Exception as ex: 
+    print ("TOKEN LIMIT EXCEEDED", ex)
     return "TOKEN LIMIT EXCEEDED"
 
 
@@ -264,6 +348,8 @@ def safe_generate_response(prompt,
 
   for i in range(repeat): 
     curr_gpt_response = GPT_request(prompt, gpt_parameter)
+    if curr_gpt_response!=str:
+      continue
     if func_validate(curr_gpt_response, prompt=prompt): 
       return func_clean_up(curr_gpt_response, prompt=prompt)
     if verbose: 
@@ -272,14 +358,31 @@ def safe_generate_response(prompt,
       print ("~~~~")
   return fail_safe_response
 
-
+@tracer
 def get_embedding(text, model="text-embedding-ada-002"):
   text = text.replace("\n", " ")
   if not text: 
     text = "this is blank"
-  return openai.Embedding.create(
+  res = openai.Embedding.create(
           input=[text], model=model)['data'][0]['embedding']
+  # print(res)
+  return res
 
+# from sentence_transformers import SentenceTransformer
+# embedding_model = SentenceTransformer("paraphrase-distilroberta-base-v1")
+# @tracer
+# def get_embedding(text, model_name="paraphrase-distilroberta-base-v1"):
+#     # Initialize the SentenceTransformer model
+    
+
+#     text = text.replace("\n", " ")
+#     if not text:
+#         text = "this is blank"
+
+#     # Get the embedding
+#     embedding = embedding_model.encode(text)
+
+#     return embedding
 
 if __name__ == '__main__':
   gpt_parameter = {"engine": "text-davinci-003", "max_tokens": 50, 

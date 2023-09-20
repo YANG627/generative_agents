@@ -553,10 +553,13 @@ def run_gpt_prompt_action_sector(action_description,
 
 
   def __func_clean_up(gpt_response, prompt=""):
+ 
     cleaned_response = gpt_response.split("}")[0]
     return cleaned_response
 
   def __func_validate(gpt_response, prompt=""): 
+    # if gpt_response!=str:
+    #   return False
     if len(gpt_response.strip()) < 1: 
       return False
     if "}" not in gpt_response:
